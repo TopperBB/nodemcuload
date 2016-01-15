@@ -7,7 +7,6 @@ setup(
     author_email = "mail@jhnet.co.uk",
     description = "NodeMCU file system utility.",
     license = "GPLv3",
-    keywords = "example documentation tutorial",
     url = "https://github.com/mossblaser/nodemcuload",
     py_modules=['nodemcuload'],
     entry_points = {
