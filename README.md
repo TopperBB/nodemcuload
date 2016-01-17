@@ -1,9 +1,10 @@
 `nodemcuload`: NodeMCU file system utility
 ==========================================
 
-A simple command-line interface for reading and writing files to the
-[spiffs](https://github.com/pellepl/spiffs) filesystem of an ESP8266 wifi IoT
-device running [NodeMCU](https://github.com/nodemcu/nodemcu-firmware).
+A simple command-line interface and Python (2 and 3) library for reading and
+writing files to the [spiffs](https://github.com/pellepl/spiffs) filesystem of
+an ESP8266 wifi IoT device running
+[NodeMCU](https://github.com/nodemcu/nodemcu-firmware).
 
 Optional: Install using `setup.py`
 ----------------------------------
@@ -56,9 +57,27 @@ To use a specific device and baudrate:
 
     $ nodemcuload --port=/dev/ttyUSB0 --baudrate=115200 ...
 
+Use as a Python library:
+
+    $ python
+    >>> from serial import Serial
+    >>> from nodemcuload import NodeMCU
+    >>> n = NodeMCU(Serial("/dev/ttyUSB0", 9600, timeout=1.0))
+    >>> print(n.get_version())
+    (1, 4)
+
 Implementation Note
 -------------------
 
 This tool functions by sending commands to the Lua interpreter provided by
 NodeMCU. This means that if this functionality is unavailable (e.g. due to a
 rogue `init.lua`) the command will fail.
+
+Running Tests
+-------------
+
+A [pytest](https://pytest.org/) based test suite is provided which can be
+executed like so:
+
+    $ pip install -r requirements_test.txt
+    $ py.test tests.py

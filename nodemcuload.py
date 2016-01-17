@@ -5,15 +5,53 @@ A command-line interface to the file system operations of the NodeMCU Lua
 interpreter.
 """
 
-import serial
+
+def lua_bytes(text):
+    """Convert some bytes into an escaped lua string literal."""
+    out = b""
+
+    # Escape any characters if necessary
+    for byte in text:
+        # Python 2 & 3 Compatibility hack
+        byte = byte if isinstance(byte, int) else ord(byte)
+
+        if byte == ord("\\"):
+            out += b"\\\\"
+        elif byte == ord("'"):
+            out += b"\\'"
+        elif 0x20 <= byte < 0x7F:
+            # Printable ASCII chars (incl. space)
+            out += chr(byte).encode("ascii")
+        else:
+            out += "\\x{:02X}".format(byte).encode("ascii")
+
+    return b"'" + out + b"'"
+
+
+def lua_string(text):
+    """Convert a Python string into a byte-encoded escaped lua string
+    literal.
+    """
+    return lua_bytes(text.encode("utf-8"))
 
 
 class NodeMCU(object):
     """Utilities which allow basic control of an ESP8266 running NodeMCU."""
 
-    def __init__(self, serial):
-        """Connect to a device at the end of a specific serial port."""
+    def __init__(self, serial, verbose_stream=None):
+        """Connect to a device at the end of a specific serial port.
+
+        Parameters
+        ----------
+        serial : :py:class:`serial.Serial`
+            A serial port connection. Users should take care to select the
+            correct baudrate and set a sensible timeout value.
+        verbose_stream : file or None
+            If not None, the data received via serial is written into the
+            provided (binary) file.
+        """
         self.serial = serial
+        self.verbose_stream = verbose_stream
 
     def __enter__(self):
         """Close the serial port using a context manager."""
@@ -23,23 +61,26 @@ class NodeMCU(object):
         """Close the serial port using a context manager."""
         return self.serial.__exit__(*args, **kwargs)
 
-    def flush(self):
-        """Dispose of anything remaining in the input buffer."""
-        while self.serial.in_waiting:
-            self.serial.read(self.serial.in_waiting)
+    def read(self, length):
+        """Read from the port and throw an exception if this fails."""
+        data = self.serial.read(length)
 
-    def send_command(self, cmd):
-        """Send a single-line Lua command.
+        if self.verbose_stream:
+            self.verbose_stream.write(data)
 
-        Also absorbs the echo back and newline.
-        """
-        cmd = (cmd + "\r\n").encode("utf-8")
-        self.serial.write(cmd)
-        # Absorb the print-back
-        self.read_line()
+        if len(data) != length:
+            raise TimeoutError()
+        return data
 
-    def read_line(self, line_ending="\r\n"):
-        """Read a single line of response.
+    def write(self, data):
+        """Write the specified data throwing an exception if this fails."""
+        written = self.serial.write(data)
+        if written != len(data):
+            raise TimeoutError()
+        return written
+
+    def read_line(self, line_ending=b"\r\n"):
+        """Read from the port until the given terminator string is found.
 
         Parameters
         ----------
@@ -52,10 +93,23 @@ class NodeMCU(object):
         is stripped from the string before it is returned.
         """
         data = b""
-        line_ending = line_ending.encode("utf-8")
-        while data[-2:] != line_ending:
-            data += self.serial.read(1)
-        return data[:-2].decode("utf-8")
+        while not data.endswith(line_ending):
+            data += self.read(1)
+        return data[:-len(line_ending)]
+
+    def flush(self):
+        """Dispose of anything remaining in the input buffer."""
+        while self.serial.in_waiting:
+            self.read(self.serial.in_waiting)
+
+    def send_command(self, cmd):
+        """Send a single-line Lua command.
+
+        Also absorbs the echo back and newline.
+        """
+        self.write(cmd + b"\r\n")
+        # Absorb the print-back
+        self.read_line()
 
     def get_version(self):
         """Get the version number of the remote device.
@@ -64,8 +118,8 @@ class NodeMCU(object):
         -------
         (major, minor)
         """
-        self.send_command("=node.info()")
-        info = list(map(int, self.read_line().split("\t")))
+        self.send_command(b"=node.info()")
+        info = list(map(int, self.read_line().split(b"\t")))
         return (info[0], info[1])
 
     def write_file(self, filename, data, block_size=64):
@@ -75,24 +129,24 @@ class NodeMCU(object):
         ----------
         filename : str
             File to write to on the device.
-        data : str
+        data : bytes
             The data to write into the file.
         block_size : int
             The number of bytes to write at a time.
         """
-        self.send_command("file.close()")
-        self.send_command("=file.open({}, 'w')".format(repr(filename)))
-        if self.read_line() == "nil":
+        self.send_command(b"file.close()")
+        self.send_command(b"=file.open(" + lua_string(filename) + b", 'w')")
+        if self.read_line() != b"true":
             raise IOError("Could not open file for writing!")
         while data:
             block = data[:block_size]
             data = data[block_size:]
-            self.send_command("=file.write({})".format(repr(block)))
+            self.send_command(b"=file.write(" + lua_bytes(block) + b")")
             response = self.read_line()
-            if response != "true":
+            if response != b"true":
                 raise IOError("Write failed! (Return value: {})".format(
                     repr(response)))
-        self.send_command("file.close()")
+        self.send_command(b"file.close()")
 
     def read_file(self, filename, block_size=64):
         """Read file from the device's flash.
@@ -106,30 +160,35 @@ class NodeMCU(object):
 
         Returns
         -------
-        The contents of the file as a string.
+        The contents of the file as a bytes.
         """
-        self.send_command("file.close()")
+        self.send_command(b"file.close()")
 
-        # Determine file size
-        self.send_command("=file.list()[{}]".format(repr(filename)))
-        size = self.read_line()
-        if size == "nil":
+        # Determine file size (and that it exists)
+        self.send_command(b"=file.list()[" + lua_string(filename) + b"]")
+        try:
+            size = int(self.read_line())
+        except ValueError:
+            # e.g. if "nil" due to missing file
             raise IOError("File does not exist!")
-        size = int(size)
 
-        self.send_command("=file.open({}, 'r')".format(repr(filename)))
-        if self.read_line() != "true":
+        # Attempt to open the file
+        self.send_command(b"=file.open(" + lua_string(filename) + b", 'r')")
+        if self.read_line() != b"true":
             raise IOError("Could not open file!")
 
         # Read the file one block at a time
         data = b""
         while size:
-            block = max(size, block_size)
+            block = min(size, block_size)
             size -= block
-            self.send_command("uart.write(0, file.read({}))".format(block))
-            data += self.serial.read(block)
+            self.send_command(
+                "uart.write(0, file.read({}))".format(block).encode("ascii"))
+            data += self.read(block)
 
-        return data.decode("utf-8")
+        self.send_command(b"file.close()")
+
+        return data
 
     def list_files(self):
         """Get a list of files on the device's flash.
@@ -140,82 +199,93 @@ class NodeMCU(object):
         """
         # Get number of files
         self.send_command(
-            "do local cnt = 0;"
-            "for k, v in pairs(file.list()) do"
-            "    cnt = cnt + 1 end;"
-            "    print(cnt);"
-            "end")
+            b"do"
+            b"    local cnt = 0;"
+            b"    for k, v in pairs(file.list()) do"
+            b"        cnt = cnt + 1;"
+            b"    end;"
+            b"    print(cnt);"
+            b"end")
         num_files = int(self.read_line())
 
-        # Print the files and their sizes (prefixed by filename length)
-        self.send_command("for f,s in pairs(file.list()) do"
-                          "    print(#f, f, s);"
-                          "end")
+        # Print the files and their sizes (prefixed by filename length) Note we
+        # uart.write the filename in case it contains a \n which would be
+        # converted into a \r\n by print.
+        self.send_command(b"for f,s in pairs(file.list()) do"
+                          b"    print(#f);"
+                          b"    uart.write(0, f);"
+                          b"    print(s);"
+                          b"end")
 
         files = {}
         for file in range(num_files):
-            line = self.read_line()
-            filename_length, _, line = line.partition("\t")
-            filename_length = int(filename_length)
-
-            filename = line[:filename_length]
-            size = int(line[filename_length + 1:])
+            filename_length = int(self.read_line())
+            filename = self.read(filename_length).decode("utf-8")
+            size = int(self.read_line())
             files[filename] = size
 
         return files
 
     def remove_file(self, filename):
         """Delete a file on the device's flash."""
-        self.send_command("=file.list()[{}]".format(repr(filename)))
-        if self.read_line() == "nil":
+        # Check that the file exists
+        self.send_command(b"=file.list()[" + lua_string(filename) + b"]")
+        try:
+            int(self.read_line())
+        except ValueError:
             raise IOError("File does not exist!")
-        self.send_command("file.remove({})".format(repr(filename)))
+
+        # Delete it
+        self.send_command(b"file.remove(" + lua_string(filename) + b")")
 
     def rename_file(self, old, new):
         """Rename a file on the device's flash."""
-        self.send_command("=file.rename({}, {})".format(
-            repr(old), repr(new)))
-        if self.read_line() != "true":
+        self.send_command(b"=file.rename(" +
+                          lua_string(old) + b", " +
+                          lua_string(new) + b")")
+        if self.read_line() != b"true":
             raise IOError("Rename failed!")
 
     def format(self):
         """Format the device's flash."""
-        self.send_command("file.format()")
+        self.send_command(b"file.format()")
 
     def dofile(self, filename):
         """Execute a file in flash using 'dofile'.
 
         Returns
         -------
-        The lines printed before the shell returns (or '> ' appears in the
-        output).
+        The bytes written to the uart before the shell returns (or '> ' appears
+        in the output...).
         """
-        self.send_command("=file.list()[{}]".format(repr(filename)))
-        if self.read_line() == "nil":
+        # Check for file existance
+        self.send_command(b"=file.list()[" + lua_string(filename) + b"]")
+        try:
+            int(self.read_line())
+        except ValueError:
             raise IOError("File does not exist!")
-        self.send_command("dofile({})".format(repr(filename)))
-        return self.read_line({"> "})
+
+        # Run the file and await return of the prompt
+        self.send_command(b"dofile(" + lua_string(filename) + b")")
+        return self.read_line(b"> ")
 
     def restart(self):
         """Request a module restart.
 
         Wait for the propt to return.
         """
-        self.send_command("node.restart()")
+        self.send_command(b"node.restart()")
 
         # Absorb the prompt returned just before restarting
-        self.read_line("> ")
+        self.read_line(b"> ")
 
         # Wait for prompt to return
-        try:
-            self.read_line("> ")
-        except UnicodeDecodeError:
-            # Some garbage will come back from the device...
-            pass
+        self.read_line(b"> ")
 
 
-def main():
+def main(*args):
     import sys
+    import serial
     import serial.tools.list_ports
     import argparse
 
@@ -255,7 +325,7 @@ def main():
     actions.add_argument("--restart", "--reset", "-R", action="store_true",
                          help="Restart the device.")
 
-    args = parser.parse_args()
+    args = parser.parse_args(*args)
 
     if args.port is None:
         parser.error("No serial port specified.")
@@ -265,20 +335,24 @@ def main():
         # Check version for compatibility (and also ensure serial stream is in
         # sync)
         if not ((1, 4) <= n.get_version() < (2, 0)):
-            raise Exception("Incompatible version of NodeMCU!")
+            raise ValueError("Incompatible version of NodeMCU!")
 
         # Handle command
         if args.write:
-            n.write_file(args.write[0], sys.stdin.read())
+            # Python 2/3 hack: get stdin for bytes
+            stdin = getattr(sys.stdin, "buffer", sys.stdin)
+            n.write_file(args.write[0], stdin.read())
         elif args.read:
-            sys.stdout.write(n.read_file(args.read[0]))
+            # Python 2/3 hack: get stdout for bytes
+            stdout = getattr(sys.stdout, "buffer", sys.stdout)
+            stdout.write(n.read_file(args.read[0]))
         elif args.list:
             files = n.list_files()
 
             # Summary line
             num_files = len(files)
             total_size = sum(files.values())
-            print("Total {} file{}, {} byte{}".format(
+            print("Total: {} file{}, {} byte{}.".format(
                 num_files, "s" if num_files != 1 else "",
                 total_size, "s" if total_size != 1 else ""))
 
@@ -290,16 +364,15 @@ def main():
         elif args.delete:
             n.remove_file(args.delete[0])
         elif args.move:
-            n.remove_file(args.move[0], args.move[1])
+            n.rename_file(args.move[0], args.move[1])
         elif args.format:
             n.format()
         elif args.dofile:
+            stdout = getattr(sys.stdout, "buffer", sys.stdout)
             sys.stdout.write(n.dofile(args.dofile[0]))
         elif args.restart:
             n.restart()
-        elif args.terminal:
-            n.terminal()
-    
+
     return 0
 
 if __name__ == "__main__":
