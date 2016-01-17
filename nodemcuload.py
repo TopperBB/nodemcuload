@@ -370,11 +370,11 @@ def main(*args):
         elif args.dofile:
             stdout = getattr(sys.stdout, "buffer", sys.stdout)
             sys.stdout.write(n.dofile(args.dofile[0]))
-        elif args.restart:
+        elif args.restart:  # pragma: no branch
             n.restart()
 
     return 0
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     import sys
     sys.exit(main())

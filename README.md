@@ -80,4 +80,4 @@ A [pytest](https://pytest.org/) based test suite is provided which can be
 executed like so:
 
     $ pip install -r requirements_test.txt
-    $ py.test tests.py
+    $ py.test tests.py --cov nodemcuload.py --cov tests.py --cov-report=html

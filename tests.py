@@ -82,7 +82,7 @@ class MockSerial(object):
         self.context_manager_state.append(("exit", args, kwargs))
 
     @property
-    def in_waiting(self):
+    def in_waiting(self):  # pragma: no cover
         if self.expected_sequence:
             return len(self.expected_sequence[0])
         else:
@@ -111,7 +111,7 @@ class MockSerial(object):
         self.expected_sequence[1] = self.expected_sequence[1][len(data):]
 
         # If no data is left to write, remove the expectation from the list
-        if not self.expected_sequence[1]:
+        if not self.expected_sequence[1]:  # pragma: no branch
             self.expected_sequence = self.expected_sequence[2:]
 
         return len(data)
@@ -535,7 +535,7 @@ class TestCLI(object):
         import serial
 
         def exit(self, type, value, tb):
-            if isinstance(type, Exception):
+            if isinstance(value, Exception):
                 raise
         mock = Mock(__enter__=Mock(), __exit__=exit)
         mock.return_value = mock
@@ -693,6 +693,16 @@ class TestCLI(object):
         # NB: Aligned columns
         out, err = capsys.readouterr()
         assert out == "Total: 1 file, 1 byte.\na.txt  1\n"
+
+    def test_list_empty(self, serial_ports, serial, monkeypatch,
+                        mock_version_response, capsys):
+        """Special case shouldn't break."""
+        monkeypatch.setattr(NodeMCU, "list_files", Mock(return_value={}))
+        assert main("--list".split()) == 0
+
+        # NB: Aligned columns
+        out, err = capsys.readouterr()
+        assert out == "Total: 0 files, 0 bytes.\n"
 
     def test_delete(self, serial_ports, serial, monkeypatch,
                     mock_version_response):
