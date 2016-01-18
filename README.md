@@ -1,6 +1,9 @@
 `nodemcuload`: NodeMCU file system utility
 ==========================================
 
+[![PyPi version](https://img.shields.io/pypi/v/nodemcuload.svg?style=flat)](https://pypi.python.org/pypi/nodemcuload)
+[![Build status](https://travis-ci.org/mossblaser/nodemcuload.svg?branch=master)](https://travis-ci.org/mossblaser/nodemcuload)
+
 A simple command-line interface and Python (2 and 3) library for reading and
 writing files to the [spiffs](https://github.com/pellepl/spiffs) filesystem of
 an ESP8266 wifi IoT device running
