@@ -13,7 +13,8 @@ Optional: Install using `setup.py`
 
 You can alternatively use the `nodemcuload.py` file standalone. Make sure you
 have the [pyserial](https://pythonhosted.org/pyserial/) library installed and
-substitute `python nodemcuload.py` for `nodemcuload` in the examples below.
+substitute `python nodemcuload.py` in place of `nodemcuload` in the examples
+below.
 
 Examples
 --------
@@ -76,8 +77,18 @@ rogue `init.lua`) the command will fail.
 Running Tests
 -------------
 
-A [pytest](https://pytest.org/) based test suite is provided which can be
-executed like so:
+To run all tests automatically against various versions of Python run:
 
-    $ pip install -r requirements_test.txt
-    $ py.test tests.py --cov nodemcuload.py --cov tests.py --cov-report=html
+    $ pip install tox
+    $ tox
+
+Alternatively you can run the [pytest](https://pytest.org/) based test suite by
+hand like so:
+
+    $ pip install -r requirements-test.txt
+    $ py.test tests.py --cov nodemcuload.py --cov tests.py --cov-fail-under=100 --cov-report=term-missing
+
+Code formatting should also be checked by flake8:
+
+    $ pip install flake8
+    $ flake8 tests.py nodemcuload.py

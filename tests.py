@@ -3,7 +3,7 @@ nodemcuload test suite.
 
 Usage:
 
-    $ pip install -r requirements_test.txt
+    $ pip install -r requirements-test.txt
     $ py.test tests.py
 """
 
@@ -154,7 +154,7 @@ class TestNodeMCU(object):
         """Make sure read fails when wrong response length received."""
         s = Mock(read=Mock(return_value=b"fails"))
         n = NodeMCU(s)
-        with pytest.raises(TimeoutError):
+        with pytest.raises(IOError):
             n.read(6)
 
     def test_write(self):
@@ -167,7 +167,7 @@ class TestNodeMCU(object):
         """Make sure write fails when wrong response length received."""
         s = Mock(write=Mock(return_value=1))
         n = NodeMCU(s)
-        with pytest.raises(TimeoutError):
+        with pytest.raises(IOError):
             n.write(b"fails")
 
     @pytest.mark.parametrize("junk",

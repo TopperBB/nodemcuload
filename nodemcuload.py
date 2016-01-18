@@ -69,14 +69,14 @@ class NodeMCU(object):
             self.verbose_stream.write(data)
 
         if len(data) != length:
-            raise TimeoutError()
+            raise IOError("Timeout.")
         return data
 
     def write(self, data):
         """Write the specified data throwing an exception if this fails."""
         written = self.serial.write(data)
         if written != len(data):
-            raise TimeoutError()
+            raise IOError("Timeout.")
         return written
 
     def read_line(self, line_ending=b"\r\n"):
@@ -358,9 +358,11 @@ def main(*args):
 
             # File listing
             if files:
-                max_filename_length = max(map(len, files)) + 1
+                max_filename_length = max(map(len, files))
                 for filename, size in files.items():
-                    print(filename.ljust(max_filename_length), size)
+                    print("{:{}s}  {}".format(filename,
+                                              max_filename_length,
+                                              size))
         elif args.delete:
             n.remove_file(args.delete[0])
         elif args.move:
