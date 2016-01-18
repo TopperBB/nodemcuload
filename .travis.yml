@@ -1,0 +1,22 @@
+sudo: false
+language: python
+python:
+        - 2.7
+        - 3.4
+        - 3.5
+install:
+        - pip install -r requirements-test.txt
+        - pip install flake8
+script:
+        - >
+            py.test tests.py \
+                --cov tests.py \
+                --cov nodemcuload.py \
+                --cov-fail-under=100 \
+                --cov-report=term-missing
+        # Code quality check
+        - flake8 tests.py nodemcuload.py
+after_success:
+        - coveralls
+notifications:
+        email: false
