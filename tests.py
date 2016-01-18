@@ -611,24 +611,24 @@ class TestCLI(object):
     def test_manual_port(self, no_serial_ports, serial, mock_format_response):
         """If no ports are available specifying a port will fix things."""
         main("--port /dev/null --format".split())
-        serial.assert_called_once_with("/dev/null", 9600)
+        serial.assert_called_once_with("/dev/null", 9600, timeout=2.0)
 
     def test_manual_port_overrides(self, serial_ports, serial,
                                    mock_format_response):
         """Specifying a port should override the default one."""
         main("--port /dev/null --format".split())
-        serial.assert_called_once_with("/dev/null", 9600)
+        serial.assert_called_once_with("/dev/null", 9600, timeout=2.0)
 
     def test_sensible_port(self, serial_ports, serial, mock_format_response):
         """If several ports are available, select /dev/ttyUSB* by preference.
         """
         main("--format".split())
-        serial.assert_called_once_with("/dev/ttyUSB5", 9600)
+        serial.assert_called_once_with("/dev/ttyUSB5", 9600, timeout=2.0)
 
     def test_manual_baudrate(self, serial_ports, serial, mock_format_response):
         """Baudrate should be overrideable."""
         main("--baudrate 115200 --format".split())
-        serial.assert_called_once_with("/dev/ttyUSB5", 115200)
+        serial.assert_called_once_with("/dev/ttyUSB5", 115200, timeout=2.0)
 
     @pytest.mark.parametrize("version", [(0, 0), (1, 3), (2, 0), (2, 5)])
     def test_bad_version(self, serial_ports, serial, monkeypatch, version):

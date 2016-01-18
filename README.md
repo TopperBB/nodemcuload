@@ -66,7 +66,7 @@ Use as a Python library:
     $ python
     >>> from serial import Serial
     >>> from nodemcuload import NodeMCU
-    >>> n = NodeMCU(Serial("/dev/ttyUSB0", 9600, timeout=1.0))
+    >>> n = NodeMCU(Serial("/dev/ttyUSB0", 9600, timeout=2.0))
     >>> print(n.get_version())
     (1, 4)
 

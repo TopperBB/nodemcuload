@@ -330,7 +330,7 @@ def main(*args):
     if args.port is None:
         parser.error("No serial port specified.")
 
-    n = NodeMCU(serial.Serial(args.port, args.baudrate))
+    n = NodeMCU(serial.Serial(args.port, args.baudrate, timeout=2.0))
     with n:
         # Check version for compatibility (and also ensure serial stream is in
         # sync)
