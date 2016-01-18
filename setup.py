@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name = "nodemcuload",
-    version = "0.0.1",
+    version = "0.0.2",
     author = "Jonathan Heathcote",
     author_email = "mail@jhnet.co.uk",
     description = "NodeMCU file system utility.",
